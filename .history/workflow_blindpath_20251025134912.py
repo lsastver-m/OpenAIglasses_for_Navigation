@@ -2,32 +2,31 @@
 # -*- coding: utf-8 -*-
 """
 盲道导航工作流 - 核心导航算法
-==========================
+=============================
 
-这是AI智能眼镜导航系统的核心盲道导航模块，负责：
-1. 盲道检测与分割
-2. 障碍物识别与避让
-3. 路径规划与引导
-4. 转弯检测与处理
-5. 斑马线感知与切换
+这是AI智能眼镜系统的核心导航模块，负责：
+1. 盲道检测与分割：使用YOLO分割模型实时识别盲道
+2. 障碍物检测：识别前方障碍物并规划避障路线
+3. 转弯检测：自动识别急转弯并提前提醒
+4. 光流稳定：使用Lucas-Kanade光流算法稳定掩码，减少抖动
+5. 语音引导：生成精准的方向指引（左转、右转、直行等）
 
 主要功能：
-- 基于深度学习的盲道分割
-- 实时障碍物检测
-- 光流追踪与稳定
+- 实时盲道分割与检测
+- 障碍物检测与避障
+- 转弯检测与引导
+- 光流稳定算法
 - 语音引导生成
-- 状态机管理
 
 技术特点：
-- 高精度盲道识别（>95%准确率）
-- 实时处理（<100ms延迟）
-- 鲁棒性设计（适应不同环境）
-- 智能避障（多类别障碍物检测）
+- 基于YOLO分割模型的高精度盲道识别
+- 集成障碍物检测的智能避障
+- 光流算法保证检测稳定性
+- 多模态反馈（视觉+语音）
 
-作者：AI智能眼镜开发团队
-版本：v2.4
+作者：AI智能眼镜项目组
+版本：v2.0
 """
-
 import os
 import time
 import cv2
@@ -36,16 +35,10 @@ import logging
 from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass
 from collections import deque
-
-# ===== 深度学习框架 =====
 import torch  # 添加这行
-
-# ===== 核心模块导入 =====
 from obstacle_detector_client import ObstacleDetectorClient
 from audio_player import play_voice_text  # 新增
 from crosswalk_awareness import CrosswalkAwarenessMonitor, split_combined_voice  # 斑马线感知
-
-# ===== 图像处理工具 =====
 # 尝试导入 Pillow，用于中文显示
 try:
     from PIL import Image, ImageDraw, ImageFont
@@ -54,7 +47,6 @@ except ImportError:
     PIL_AVAILABLE = False
     Image, ImageDraw, ImageFont = None, None, None
 
-# ===== 日志配置 =====
 logger = logging.getLogger(__name__)
 
 # ========== 状态常量定义 ==========

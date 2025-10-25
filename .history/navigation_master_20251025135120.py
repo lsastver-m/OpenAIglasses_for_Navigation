@@ -2,25 +2,24 @@
 # -*- coding: utf-8 -*-
 """
 导航统领器 - 系统状态机核心
-========================
+============================
 
-这是整个AI智能眼镜导航系统的状态机核心，负责：
-1. 管理系统状态转换和协调
-2. 整合各个导航工作流
+这是整个AI智能眼镜导航系统的核心状态机，负责：
+1. 管理所有导航模式的状态转换
+2. 协调盲道导航、过马路导航、物品查找等功能
 3. 处理语音指令和状态切换
 4. 提供统一的导航接口
 
-主要功能：
-- 状态机管理：IDLE、CHAT、BLINDPATH_NAV、CROSSING等状态
-- 工作流协调：盲道导航、过马路、物品查找
-- 信号处理：多数表决滤波、状态平滑
-- 结果整合：统一的结果输出格式
+主要状态：
+- IDLE: 空闲状态
+- CHAT: 对话模式（暂停导航）
+- BLINDPATH_NAV: 盲道导航
+- CROSSING: 过马路模式
+- TRAFFIC_LIGHT_DETECTION: 红绿灯检测
+- ITEM_SEARCH: 物品查找模式
 
-状态流转：
-IDLE -> CHAT/BLINDPATH_NAV/ITEM_SEARCH -> 具体导航状态 -> IDLE
-
-作者：AI智能眼镜开发团队
-版本：v2.4
+作者：AI智能眼镜项目组
+版本：v2.0
 """
 
 import time
@@ -31,14 +30,12 @@ from dataclasses import dataclass
 from typing import Optional, Dict, Any, Deque, List, Tuple
 from collections import deque
 
-# ===== 工作流模块导入 =====
 # 工作流导入（与现有文件解耦）
 from workflow_blindpath import BlindPathNavigator, ProcessingResult as BlindResult
 from workflow_crossstreet import CrossStreetNavigator, CrossStreetResult as CrossResult
 
-# ========== 系统状态常量定义 ==========
-# 这些常量定义了整个导航系统的所有可能状态
-IDLE = "IDLE"                          # 空闲/未启用状态
+# ========== 状态常量 ==========
+IDLE = "IDLE"                          # 空闲/未启用
 CHAT = "CHAT"                          # 对话模式（不进行导航，只返回原始画面）
 BLINDPATH_NAV = "BLINDPATH_NAV"        # 正在走盲道（复用 BlindPathNavigator）
 SEEKING_CROSSWALK = "SEEKING_CROSSWALK"# 盲道阶段发现斑马线，正对准/靠近
@@ -49,61 +46,23 @@ RECOVERY = "RECOVERY"                  # 兜底/恢复（感知暂时丢失时�
 TRAFFIC_LIGHT_DETECTION = "TRAFFIC_LIGHT_DETECTION"  # 红绿灯检测模式
 ITEM_SEARCH = "ITEM_SEARCH"            # 找物品模式（暂停导航，由yolomedia处理画面）
 
-# ========== 数据结构定义 ==========
+# ========== 返回结构 ==========
 @dataclass
 class OrchestratorResult:
-    """
-    导航统领器结果数据结构
-    
-    用于统一返回导航处理结果，包含：
-    - annotated_image: 标注后的图像（可选）
-    - guidance_text: 语音引导文本
-    - state: 当前状态
-    - extras: 额外信息字典
-    """
-    annotated_image: Optional[np.ndarray]  # 标注后的图像
-    guidance_text: str                      # 语音引导文本
-    state: str                             # 当前状态
-    extras: Dict[str, Any]                 # 额外信息
+    annotated_image: Optional[np.ndarray]
+    guidance_text: str
+    state: str
+    extras: Dict[str, Any]
 
-# ========== 信号处理工具类 ==========
+# ========== 实用：信号平滑/多数表决 ==========
 class MajorityFilter:
-    """
-    多数表决滤波器
-    
-    用于对连续的状态信号进行平滑处理，通过多数表决
-    来减少噪声和异常值的影响。
-    
-    应用场景：
-    - 状态检测结果的平滑
-    - 语音指令的确认
-    - 传感器数据的滤波
-    """
     def __init__(self, size: int = 8):
-        """
-        初始化多数表决滤波器
-        
-        Args:
-            size: 缓冲区大小，决定平滑程度
-        """
         self.buf: Deque[str] = deque(maxlen=size)
 
     def push(self, v: str):
-        """
-        添加新的信号值
-        
-        Args:
-            v: 新的信号值
-        """
         self.buf.append(v)
 
     def majority(self) -> str:
-        """
-        获取多数表决结果
-        
-        Returns:
-            出现次数最多的信号值，如果缓冲区为空则返回"unknown"
-        """
         if not self.buf:
             return "unknown"
         cnt = {}
@@ -306,11 +265,42 @@ def _draw_progress_bar(img, ratio: float, pos=(10, 90), size=(180, 10), color="c
 
 # ========== 统领器 ==========
 class NavigationMaster:
+    """
+    导航统领器 - 系统状态机核心类
+    
+    功能说明：
+    - 管理整个导航系统的状态转换
+    - 协调盲道导航、过马路导航、物品查找等功能
+    - 处理语音指令和状态切换
+    - 提供统一的导航接口
+    
+    主要状态：
+    - IDLE: 空闲状态
+    - CHAT: 对话模式（暂停导航）
+    - BLINDPATH_NAV: 盲道导航
+    - CROSSING: 过马路模式
+    - TRAFFIC_LIGHT_DETECTION: 红绿灯检测
+    - ITEM_SEARCH: 物品查找模式
+    
+    技术特点：
+    - 状态机模式管理复杂导航流程
+    - 支持状态保存和恢复
+    - 智能语音节流避免重复播报
+    - 多模态反馈（视觉+语音）
+    """
     def __init__(self,
                  blind_nav: BlindPathNavigator,
                  cross_nav: CrossStreetNavigator,
                  *,
                  min_tts_interval: float = 1.2):
+        """
+        初始化导航统领器
+        
+        参数：
+        - blind_nav: 盲道导航器实例
+        - cross_nav: 过马路导航器实例
+        - min_tts_interval: 最小语音播报间隔（秒），避免重复播报
+        """
         self.blind = blind_nav
         self.cross = cross_nav
         self.state = IDLE
@@ -481,6 +471,33 @@ class NavigationMaster:
 
     # ----- 主循环 -----
     def process_frame(self, bgr: np.ndarray) -> OrchestratorResult:
+        """
+        处理单帧图像的核心方法
+        
+        功能说明：
+        - 根据当前状态调用相应的导航模块
+        - 处理状态转换和语音引导
+        - 返回标注图像和引导文本
+        
+        处理流程：
+        1. 检查当前状态
+        2. 调用相应的导航器处理图像
+        3. 处理状态转换逻辑
+        4. 生成语音引导文本
+        5. 返回处理结果
+        
+        参数：
+        - bgr: 输入的BGR图像数组
+        
+        返回值：
+        - OrchestratorResult: 包含标注图像、引导文本、状态信息的结果对象
+        
+        状态处理：
+        - BLINDPATH_NAV: 盲道导航状态
+        - CROSSING: 过马路状态
+        - WAIT_TRAFFIC_LIGHT: 等待红绿灯状态
+        - 其他状态的相应处理
+        """
         now = time.time()
         
         # 【修改】IDLE状态默认进入CHAT模式，而不是自动开始导航

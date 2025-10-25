@@ -1,35 +1,30 @@
 # -*- coding: utf-8 -*-
 """
-过马路工作流 - 斑马线导航核心
-==========================
+过马路导航工作流 - 斑马线检测与引导
+=================================
 
-这是AI智能眼镜导航系统的过马路导航模块，负责：
-1. 斑马线检测与识别
-2. 方向对齐与引导
-3. 红绿灯检测（可选）
-4. 安全过马路指导
-5. 光流追踪与稳定
+这是AI智能眼镜系统的过马路辅助模块，负责：
+1. 斑马线识别：实时检测斑马线位置和方向
+2. 对齐引导：引导用户对准斑马线中心
+3. 安全提醒：提供过马路的安全指导
+4. 光流追踪：使用光流算法稳定检测结果
 
 主要功能：
-- 基于深度学习的斑马线分割
-- 实时方向计算与校正
-- 红绿灯状态检测
-- 语音安全引导
+- 实时斑马线检测与分割
+- 角度和偏移计算
+- 用户对齐引导
+- 光流特征点追踪
 - 可视化引导线
 
 技术特点：
-- 高精度斑马线识别（>90%准确率）
-- 实时方向计算（<50ms延迟）
-- 智能光流追踪
-- 安全引导设计
+- 基于YOLO分割模型的高精度斑马线识别
+- 光流算法保证检测稳定性
+- 智能对齐算法
+- 多模态反馈（视觉+语音）
 
-状态流转：
-SEEKING_CROSSWALK -> WAIT_TRAFFIC_LIGHT -> CROSSING
-
-作者：AI智能眼镜开发团队
-版本：v2.4
+作者：AI智能眼镜项目组
+版本：v2.0
 """
-
 import torch
 import os
 import time
@@ -38,11 +33,8 @@ import numpy as np
 import cv2
 from dataclasses import dataclass
 from typing import Optional, List, Dict, Any
-
-# ===== 深度学习框架 =====
 # 【移除】from audio_player import play_voice_text - 不在工作流内部播放音频
 
-# ===== 图像处理工具 =====
 # 可选：用于更精致的数据面板（与 blindpath 一致）
 try:
     from PIL import Image, ImageDraw, ImageFont
@@ -51,14 +43,12 @@ except ImportError:
     PIL_AVAILABLE = False
     Image, ImageDraw, ImageFont = None, None, None
 
-# ===== 障碍物检测模块 =====
 # 可选：自动启用障碍物检测（与 blindpath 一致）
 try:
     from obstacle_detector_client import ObstacleDetectorClient
 except Exception:
     ObstacleDetectorClient = None
 
-# ===== 红绿灯检测模块 =====
 # 红绿灯检测模块
 try:
     import trafficlight_detection
@@ -67,7 +57,6 @@ except Exception:
     TRAFFIC_LIGHT_AVAILABLE = False
     trafficlight_detection = None
 
-# ===== 日志配置 =====
 logger = logging.getLogger(__name__)
 
 # ========== 状态常量 ==========

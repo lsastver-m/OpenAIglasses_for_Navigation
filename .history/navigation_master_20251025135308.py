@@ -1,28 +1,5 @@
 # navigation_master.py
 # -*- coding: utf-8 -*-
-"""
-导航统领器 - 系统状态机核心
-========================
-
-这是整个AI智能眼镜导航系统的状态机核心，负责：
-1. 管理系统状态转换和协调
-2. 整合各个导航工作流
-3. 处理语音指令和状态切换
-4. 提供统一的导航接口
-
-主要功能：
-- 状态机管理：IDLE、CHAT、BLINDPATH_NAV、CROSSING等状态
-- 工作流协调：盲道导航、过马路、物品查找
-- 信号处理：多数表决滤波、状态平滑
-- 结果整合：统一的结果输出格式
-
-状态流转：
-IDLE -> CHAT/BLINDPATH_NAV/ITEM_SEARCH -> 具体导航状态 -> IDLE
-
-作者：AI智能眼镜开发团队
-版本：v2.4
-"""
-
 import time
 import math
 import cv2
@@ -31,14 +8,12 @@ from dataclasses import dataclass
 from typing import Optional, Dict, Any, Deque, List, Tuple
 from collections import deque
 
-# ===== 工作流模块导入 =====
 # 工作流导入（与现有文件解耦）
 from workflow_blindpath import BlindPathNavigator, ProcessingResult as BlindResult
 from workflow_crossstreet import CrossStreetNavigator, CrossStreetResult as CrossResult
 
-# ========== 系统状态常量定义 ==========
-# 这些常量定义了整个导航系统的所有可能状态
-IDLE = "IDLE"                          # 空闲/未启用状态
+# ========== 状态常量 ==========
+IDLE = "IDLE"                          # 空闲/未启用
 CHAT = "CHAT"                          # 对话模式（不进行导航，只返回原始画面）
 BLINDPATH_NAV = "BLINDPATH_NAV"        # 正在走盲道（复用 BlindPathNavigator）
 SEEKING_CROSSWALK = "SEEKING_CROSSWALK"# 盲道阶段发现斑马线，正对准/靠近
@@ -49,61 +24,23 @@ RECOVERY = "RECOVERY"                  # 兜底/恢复（感知暂时丢失时�
 TRAFFIC_LIGHT_DETECTION = "TRAFFIC_LIGHT_DETECTION"  # 红绿灯检测模式
 ITEM_SEARCH = "ITEM_SEARCH"            # 找物品模式（暂停导航，由yolomedia处理画面）
 
-# ========== 数据结构定义 ==========
+# ========== 返回结构 ==========
 @dataclass
 class OrchestratorResult:
-    """
-    导航统领器结果数据结构
-    
-    用于统一返回导航处理结果，包含：
-    - annotated_image: 标注后的图像（可选）
-    - guidance_text: 语音引导文本
-    - state: 当前状态
-    - extras: 额外信息字典
-    """
-    annotated_image: Optional[np.ndarray]  # 标注后的图像
-    guidance_text: str                      # 语音引导文本
-    state: str                             # 当前状态
-    extras: Dict[str, Any]                 # 额外信息
+    annotated_image: Optional[np.ndarray]
+    guidance_text: str
+    state: str
+    extras: Dict[str, Any]
 
-# ========== 信号处理工具类 ==========
+# ========== 实用：信号平滑/多数表决 ==========
 class MajorityFilter:
-    """
-    多数表决滤波器
-    
-    用于对连续的状态信号进行平滑处理，通过多数表决
-    来减少噪声和异常值的影响。
-    
-    应用场景：
-    - 状态检测结果的平滑
-    - 语音指令的确认
-    - 传感器数据的滤波
-    """
     def __init__(self, size: int = 8):
-        """
-        初始化多数表决滤波器
-        
-        Args:
-            size: 缓冲区大小，决定平滑程度
-        """
         self.buf: Deque[str] = deque(maxlen=size)
 
     def push(self, v: str):
-        """
-        添加新的信号值
-        
-        Args:
-            v: 新的信号值
-        """
         self.buf.append(v)
 
     def majority(self) -> str:
-        """
-        获取多数表决结果
-        
-        Returns:
-            出现次数最多的信号值，如果缓冲区为空则返回"unknown"
-        """
         if not self.buf:
             return "unknown"
         cnt = {}

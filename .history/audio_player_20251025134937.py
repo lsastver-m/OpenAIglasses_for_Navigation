@@ -1,38 +1,31 @@
 # audio_player.py
 # -*- coding: utf-8 -*-
 """
-音频播放器 - 统一音频管理
-======================
+音频播放器 - 统一音频管理系统
+============================
 
-这是AI智能眼镜导航系统的音频播放管理模块，负责：
-1. 预录音频文件播放
-2. TTS语音合成播放
-3. 多路音频混音
-4. 音频流管理
-5. 音量控制
+这是AI智能眼镜系统的音频播放核心，负责：
+1. 音频播放管理：统一的音频播放接口
+2. 多路混音：支持系统语音、AI回复、环境音同时播放
+3. 音频格式转换：支持多种音频格式的转换和处理
+4. 线程安全播放：多线程环境下的安全音频播放
 
 主要功能：
-- 预录音频播放：播放系统提示音
-- TTS语音合成：实时语音生成
-- 音频混音：多路音频同时播放
-- 流式播放：实时音频流传输
-- 音量控制：动态音量调节
+- TTS语音播放
+- 预录音频播放
+- 多路音频混音
+- 音量控制
+- 线程安全播放
 
 技术特点：
-- 线程安全播放
-- 实时音频流
-- 多格式支持
-- 智能缓存
-- 低延迟播放
+- 支持WAV、PCM等多种音频格式
+- 音频压缩缓存机制
+- 优先级队列管理
+- 线程安全的播放控制
+- 音频格式自动转换
 
-应用场景：
-- 导航引导：播放方向提示音
-- 状态反馈：播放系统状态音
-- 语音交互：TTS语音回复
-- 环境提示：播放环境信息
-
-作者：AI智能眼镜开发团队
-版本：v2.4
+作者：AI智能眼镜项目组
+版本：v2.0
 """
 
 import os
@@ -45,20 +38,12 @@ import time
 from audio_stream import broadcast_pcm16_realtime
 from audio_compressor import compressed_audio_cache, AudioCompressor
 
-# ===== 录制器模块导入 =====
 # 导入录制器（避免循环导入，在需要时动态导入）
 _recorder_imported = False
 _sync_recorder = None
 
 def _get_recorder():
-    """
-    延迟导入录制器
-    
-    避免循环导入问题，在需要时才导入录制器模块
-    
-    Returns:
-        录制器模块对象，如果导入失败则返回None
-    """
+    """延迟导入录制器"""
     global _recorder_imported, _sync_recorder
     if not _recorder_imported:
         try:
@@ -70,7 +55,6 @@ def _get_recorder():
             _recorder_imported = True  # 标记已尝试，避免重复
     return _sync_recorder
 
-# ===== 音频文件配置 =====
 # 兼容旧工程中的示例音频（保留）
 AUDIO_BASE_DIR = r"C:\Users\Administrator\Desktop\rebuild1002\music"
 

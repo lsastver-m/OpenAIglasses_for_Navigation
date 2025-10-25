@@ -97,60 +97,46 @@ CHUNK_MS     = 20                         # 音频块大小：20ms
 BYTES_CHUNK  = SAMPLE_RATE * CHUNK_MS // 1000 * 2  # 每块字节数
 SILENCE_20MS = bytes(BYTES_CHUNK)       # 20ms静音数据
 
-# ===== 自定义模块导入 =====
 # ---- 引入我们的模块 ----
-# 音频流处理模块
 from audio_stream import (
-    register_stream_route,         # 挂载 /stream.wav 路由
-    broadcast_pcm16_realtime,      # 实时向连接分发 16k PCM音频
-    hard_reset_audio,              # 音频+AI 播放总闸控制
-    BYTES_PER_20MS_16K,           # 20ms音频数据字节数
-    is_playing_now,               # 检查是否正在播放
-    current_ai_task,              # 当前AI任务状态
+    register_stream_route,         # 挂 /stream.wav
+    broadcast_pcm16_realtime,      # 实时向连接分发 16k PCM
+    hard_reset_audio,              # 音频+AI 播放总闸
+    BYTES_PER_20MS_16K,
+    is_playing_now,
+    current_ai_task,
 )
-
-# AI对话模块
 from omni_client import stream_chat, OmniStreamPiece
-
-# 语音识别核心模块
 from asr_core import (
-    ASRCallback,                  # ASR回调处理类
-    set_current_recognition,      # 设置当前识别状态
-    stop_current_recognition,     # 停止当前识别
+    ASRCallback,
+    set_current_recognition,
+    stop_current_recognition,
 )
-
-# 音频播放模块
 from audio_player import initialize_audio_system, play_voice_text
 
-# ===== 录制和信号处理 =====
 # ---- 同步录制器 ----
 import sync_recorder
 import signal
 import atexit
 
-# ===== 网络配置 =====
-# ---- IMU UDP 配置 ----
-UDP_IP   = "0.0.0.0"    # UDP监听IP地址
-UDP_PORT = 12345        # UDP监听端口
+# ---- IMU UDP ----
+UDP_IP   = "0.0.0.0"
+UDP_PORT = 12345
 
-# ===== FastAPI应用初始化 =====
 app = FastAPI()
 
-# ====== 全局状态与容器 ======
-# 挂载静态文件服务
+# ====== 状态与容器 ======
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# WebSocket连接管理
-ui_clients: Dict[int, WebSocket] = {}  # UI客户端连接字典
-current_partial: str = ""              # 当前部分识别结果
-recent_finals: List[str] = []          # 最近的最终识别结果列表
-RECENT_MAX = 50                        # 最大保存的识别结果数量
-last_frames: Deque[Tuple[float, bytes]] = deque(maxlen=10)  # 最近帧数据队列
+ui_clients: Dict[int, WebSocket] = {}
+current_partial: str = ""
+recent_finals: List[str] = []
+RECENT_MAX = 50
+last_frames: Deque[Tuple[float, bytes]] = deque(maxlen=10)
 
-# 视频流连接管理
-camera_viewers: Set[WebSocket] = set()  # 摄像头观察者集合
-esp32_camera_ws: Optional[WebSocket] = None  # ESP32摄像头WebSocket连接
-imu_ws_clients: Set[WebSocket] = set()  # IMU数据WebSocket客户端集合
+camera_viewers: Set[WebSocket] = set()
+esp32_camera_ws: Optional[WebSocket] = None
+imu_ws_clients: Set[WebSocket] = set()
 esp32_audio_ws: Optional[WebSocket] = None
 
 # 【新增】盲道导航相关全局变量
